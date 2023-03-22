@@ -2,7 +2,6 @@ cimport cython
 from cython.parallel import prange, parallel, threadid
 import numpy as np
 cimport numpy as np
-from scipy.signal.sigtools import _correlateND
 import ctypes
 
 DTYPE = np.uint8
@@ -103,11 +102,11 @@ def generate_mp_timeseries(np.ndarray[DTYPE2_t, ndim=1] spatial_ts,
     # cdef's
     cdef int t
     cdef int tlim = spatial_ts.shape[0]
-    
+
     # initialize output variable
     cdef np.ndarray[DTYPE2_t,ndim=1,mode='c'] m_ts = np.zeros(tlim,dtype=DTYPE2)
     cdef np.ndarray[DTYPE2_t,ndim=1,mode='c'] p_ts = np.zeros(tlim,dtype=DTYPE2)
-    
+
     # the loop
     for t in xrange(tlim):
         amp = spatial_ts[t]
@@ -115,7 +114,7 @@ def generate_mp_timeseries(np.ndarray[DTYPE2_t, ndim=1] spatial_ts,
         if flicker != 0:
             m_ts[t] = m_amp[flicker-1] * amp
             p_ts[t] = p_amp[flicker-1] * amp
-            
+
     return m_ts, p_ts
 
 @cython.boundscheck(False)
@@ -520,32 +519,32 @@ def generate_2dcos_receptive_field(DTYPE2_t x, DTYPE2_t y, DTYPE2_t sigma, DTYPE
             The coordinate matrix along the horizontal dimension of the display (degrees)
     deg_y : 2D array
             The coordinate matrix along the vertical dimension of the display (degrees)
-            
-            
+
+
     Returns
-    
+
     stim : ndarray
         The 1D array containing the stimulus energies given the Gaussian coordinates
-        
+
     """
-    
+
     # cdef's
     cdef int i,j,k
     cdef int xlim = deg_x.shape[0]
     cdef int ylim = deg_x.shape[1]
     cdef DTYPE2_t d
     cdef DTYPE2_t pi = 3.14159265
-    
-    
+
+
     # initialize output variable
     cdef np.ndarray[DTYPE2_t, ndim=2, mode='c'] rf = np.zeros((xlim,ylim),dtype=DTYPE2)
-    
+
     # the loop
     for i in xrange(xlim):
         for j in xrange(ylim):
             d = ((deg_x[i,j]-x)**2 + (deg_y[i,j]-y)**2)**0.5
             rf[i,j] = ((0.5*(1 + cos(d*pi/sigma) ))**power) * (d<=sigma)
-            
+
     return rf
 
 @cython.boundscheck(False)
