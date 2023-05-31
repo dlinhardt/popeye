@@ -10,3 +10,5 @@ build
 _build
 _static
 _templates
+.vscode/launch.json
+.vscode
