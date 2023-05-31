@@ -45,7 +45,7 @@ class GaussianModel(PopulationModel):
 
         """
 
-        PopulationModel.__init__(self, stimulus, hrf_model, normalizer, nuisance=nusiance)
+        PopulationModel.__init__(self, stimulus, hrf_model, normalizer, nuisance=nuisance)
 
     # main method for deriving model time-series
     def generate_ballpark_prediction(self, x, y, sigma, hrf_delay):
