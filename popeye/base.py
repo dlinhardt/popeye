@@ -124,6 +124,8 @@ class PopulationModel(object):
     def hrf(self):
         if hasattr(self, 'hrf_delay'): # pragma: no cover
             return self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
+        elif isinstance(self.hrf_model, list): # when list is passed just use it as HRF
+            return self.hrf_model
         else: # pragma: no cover
             raise NotImplementedError("You must set the HRF delay to generate the HRF")
 
