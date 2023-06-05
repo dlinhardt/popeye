@@ -311,7 +311,7 @@ class PopulationFit(object):
         b = self.data
         rss = ne.evaluate('sum((a-b)**2,axis=1)')
         idx = np.argmin(rss)
-        return zip(self.model.cached_model_parameters[idx], rss[idx])
+        return self.model.cached_model_parameters[idx], rss[idx]
 
     # the brute search
     @auto_attr
