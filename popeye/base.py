@@ -311,7 +311,7 @@ class PopulationFit(object):
         b = self.data
         rss = ne.evaluate('sum((a-b)**2,axis=1)')
         idx = np.argmin(rss)
-        return self.model.cached_model_parameters[idx]
+        return self.model.cached_model_parameters[idx], rss[idx]
 
     # the brute search
     @auto_attr
@@ -336,7 +336,7 @@ class PopulationFit(object):
     def gradient_descent(self):
 
         if self.very_verbose: # pragma: no cover
-            print('The gridfit solution was %s, starting gradient descent ...' %(self.ballpark))
+            print('The gridfit solution was %s, with VE %s, starting gradient descent...' %(self.ballpark[0]))
 
         return utils.gradient_descent_search(self.data,
                                              utils.error_function,
