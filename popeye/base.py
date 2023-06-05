@@ -336,12 +336,13 @@ class PopulationFit(object):
     def gradient_descent(self):
 
         if self.very_verbose: # pragma: no cover
-            print('The gridfit solution was %s, with VE %s, starting gradient descent...' %(self.ballpark[0]))
+            bp1, bp2 = self.ballpark
+            print('The gridfit solution was %s, with rss %s, starting gradient descent...' %(bp1, bp2))
 
         return utils.gradient_descent_search(self.data,
                                              utils.error_function,
                                              self.model.generate_prediction,
-                                             self.ballpark,
+                                             self.ballpark[0],
                                              self.bounds,
                                              self.very_verbose)
     @auto_attr
