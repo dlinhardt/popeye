@@ -42,44 +42,44 @@ except NameError:  # pragma: no cover
 
 
 def regularizing_error_function(parameter, bundle, p_bounds, thr=0.10): # pragma: no cover
-    
+
     # if out of bounds
     if parameter < p_bounds[0] or parameter > p_bounds[1]:
             return np.inf
-    
+
     # execute
     output = regularizing_objective_function(parameter, bundle)
-    
+
     # what?
     error = np.mean([o.rss for o in output if not np.isnan(o.rss) and o.rsquared > thr])
-    
+
     # when?
     now = str(datetime.datetime.now()).replace(" ","_").replace(".","_").replace(":","_").replace('-','_')
-    
+
     # verbose!
     print('parameter=%.05f    error=%.05f    now=%s' %(o.model.parameter, error, now))
-    
+
     return error
 
 def regularizing_objective_function(parameter, bundle): # pragma: no cover
-    
+
     # attach the guess for tau to each of the voxels in the bundle
     for voxel in bundle:
         model = voxel[1]
         model.parameter = parameter
-        
+
     # fit each of the voxels
     num_cpus = sharedmem.cpu_count()-1
     with sharedmem.Pool(np=num_cpus) as pool:
         output = pool.map(parallel_fit, bundle)
-    
+
     return output
 
 def regularizer(bundle, p_grid, p_bounds, Ns=None): # pragma: no cover
-    
+
     p0 = brute(regularizing_error_function, (p_grid,), args=(bundle, p_bounds), Ns=Ns, finish=None, full_output=True)
     phat = fmin_powell(regularizing_error_function, p0[0], args=(bundle, p_bounds), xtol=1e-4, ftol=1e-4, full_output=True, retall=True)
-    
+
     return p0,phat
 
 def _gamma_difference_hrf(tr, oversampling=1, time_length=32., onset=0.,
@@ -141,73 +141,73 @@ def glover_hrf(delay, tr, oversampling=1, time_length=32., onset=0.):
 
 
 def grid_slice(start, stop, Ns, dryrun=False):
-    
+
     #### NOTE: there is some weird stuff going on when Ns is => stop-start
     #### it will return an array/slice object that is longer and wide by 1
     #### element. This is easy to fix in the dry-run mode but not so with
     #### the slice object. Why oh why does scipy.brute insist on slice?
-    
+
     # special case
     if Ns == 2:
         step = stop-start
     # all others
     else:
         step = np.diff(np.linspace(start,stop,Ns))[0]
-    
+
     # if true, this return the ndarray rather than slice object.
     if dryrun: # pragma: no cover
         return arange(start, stop+step, step) # pragma: no cover
     else:
         return slice(start, stop+step, step)
-        
+
 def distance_mask(x, y, sigma, deg_x, deg_y, amplitude=1):
-    
+
     distance = (deg_x - x)**2 + (deg_y - y)**2
     mask = np.zeros_like(distance, dtype='uint8')
     mask[distance < sigma**2] = 1
     mask *= amplitude
-    
+
     return mask
 
 def recast_estimation_results(output, grid_parent, overloaded=False):
-    
+
     # load the gridParent
     dims = list(grid_parent.shape)
     dims = dims[0:3]
-    
+
     if overloaded == True and output[0].overloaded_estimate is not None:
         dims.append(len(output[0].overloaded_estimate)+1)
     else:
         dims.append(len(output[0].estimate)+1)
-        
+
     # initialize the statmaps
     estimates = np.zeros(dims)
-    
+
     # extract the prf model estimates from the results queue output
     for fit in output:
-        
+
         if not np.isnan(fit.rsquared): # pragma: no cover
-        
+
             # gather the estimate + stats
             if overloaded == True and fit.overloaded_estimate is not None:
                 voxel_dat = list(fit.overloaded_estimate)
             else:
                 voxel_dat = list(fit.estimate)
-                
+
             voxel_dat.append(fit.rsquared)
             voxel_dat = np.array(voxel_dat)
-            
+
             # assign to
             estimates[tuple(fit.voxel_index)] = voxel_dat
-            
+
     # get header information from the gridParent and update for the prf volume
     aff = grid_parent.get_affine()
     hdr = grid_parent.get_header()
     hdr.set_data_shape(dims)
-    
+
     # recast as nifti
     nifti_estimates = nibabel.Nifti1Image(estimates,aff,header=hdr)
-    
+
     return nifti_estimates
 
 def recast_xval_results(output, bootstraps, indices, grid_parent, overloaded=False, ncpus=30):
@@ -215,69 +215,69 @@ def recast_xval_results(output, bootstraps, indices, grid_parent, overloaded=Fal
     # load the grid_parent (x,y,z)
     dims = list(grid_parent.shape)
     dims = dims[0:3]
-    
+
     # params + rsquared + cod
     if overloaded == True and output[0].overloaded_estimate is not None:
         dims.append(len(output[0].overloaded_estimate)+2)
     else:
         dims.append(len(output[0].estimate)+2)
-    
+
     # add bootstrap dim
     dims.append(bootstraps)
-    
+
     # initialize the statmaps
     estimates = generate_shared_array(np.zeros(dims), ctypes.c_double)
-    
+
     # parallelizer
     def parallel_loader(index): # pragma: no cover
-        
+
         # gather up fits for this voxel
         fits = [o for o in output if list(o.voxel_index) == list(index)]
-        
+
         # gather the estimate + stats
         if overloaded == True and fits[0].overloaded_estimate is not None:
             params = np.array([fit.overloaded_estimate for fit in fits])
         else:
             params = np.array([fit.estimate for fit in fits])
-            
+
         # xval metrics
         rsq = np.array([fit.rsquared for fit in fits])
         cod = np.array([fit.cod for fit in fits])
-            
+
         # assign
         estimates[index[0],index[1],index[2]] = np.concatenate((params, cod[:,np.newaxis], rsq[:,np.newaxis]),-1).T
-        
+
         return None
-        
+
     # populate data structure
     with sharedmem.Pool(np=ncpus) as pool:
         pool.map(parallel_loader, indices)
-        
+
     # header & affine
     aff = grid_parent.get_affine()
     hdr = grid_parent.get_header()
     hdr.set_data_shape(dims)
-    
+
     # recast as nifti
     nifti_estimates = nibabel.Nifti1Image(estimates,aff,header=hdr)
-    
+
     return nifti_estimates
 
 def make_nifti(data, grid_parent=None):
-    
+
     if grid_parent:
-        
+
         # get header information from the gridParent and update for the prf volume
         aff = grid_parent.get_affine()
         hdr = grid_parent.get_header()
-        
+
         # recast as nifti
         nifti = nibabel.Nifti1Image(data,aff,header=hdr)
-        
+
     else:
         aff = np.eye(4,4)
         nifti = nibabel.Nifti1Image(data,aff)
-        
+
     return nifti
 
 def generate_shared_array(unshared_arr,dtype):
@@ -413,7 +413,7 @@ def gradient_descent_search(data, error_function, objective_function, parameters
     method for minimization, Compututation Journal 6, 163-168.
 
     """
-    
+
     # if bounds is None:
     #     output = least_squares(error_function_residual, parameters, method='lm',
     #                            args=(data, objective_function, verbose))
@@ -446,7 +446,7 @@ def check_parameters(parameters, bounds):
             return None
         if b[1] and b[1] < p:
             return None
-    
+
     # merge the parameters and arguments
     ensemble = []
     ensemble.extend(parameters)
@@ -578,7 +578,7 @@ def error_function(parameters, bounds, data, objective_function, verbose):
     error : float
         The residual sum of squared errors between the prediction and data.
     """
-    
+
     ############
     #   NOTE   #
     ############
@@ -586,7 +586,7 @@ def error_function(parameters, bounds, data, objective_function, verbose):
     # i think it is because scipy.optimize.brute returns
     # a scalar when num params is 1, and a tuple/list
     # when num params is > 1. have to look into this further
-    
+
     # check if parameters are inside bounds
     for p, b in zip(parameters,bounds):
         # if not return an inf
@@ -594,22 +594,22 @@ def error_function(parameters, bounds, data, objective_function, verbose):
             return np.inf
         if b[1] and b[1] < p:
             return np.inf
-            
+
     # merge the parameters and arguments
     ensemble = []
     ensemble.extend(parameters)
-    
+
     # compute the RSS
     prediction = objective_function(*ensemble)
-    
+
     # if nan, return inf
     if np.any(np.isnan(prediction)):
         return np.inf # pragma: no cover
-        
+
     # else, return RSS
     error = np.nansum((data-prediction)**2)
     # error = norm(data-prediction)
-    
+
     # print for debugging
     if verbose:
         print(parameters, error)
@@ -657,22 +657,22 @@ def double_gamma_hrf(delay, tr, fptr=1.0, integrator=trapz):
 
     """
     from scipy.special import gamma
-    
+
     # add delay to the peak and undershoot params (alpha 1 and 2)
     alpha_1 = float(5 + delay)
     beta_1 = 1.0
     c = 0.1
     alpha_2 = float(15 + delay)
     beta_2 = 1.0
-    
+
     t = np.arange(0,32,tr)
-    
+
     hrf = ( ( ( t ** (alpha_1) * beta_1 ** alpha_1 * np.exp( -beta_1 * t )) /gamma( alpha_1 )) - c *
             ( ( t ** (alpha_2) * beta_2 ** alpha_2 * np.exp( -beta_2 * t )) /gamma( alpha_2 )) )
-            
+
     if integrator: # pragma: no cover
         hrf /= integrator(hrf)
-        
+
     return hrf
 
 def percent_change(ts, ax=-1):
@@ -743,85 +743,85 @@ def zscore(time_series, axis=-1):
     else:
         zt = time_series - et[sl]
         zt /= st[sl]
-        
+
     return zt
-    
+
 def bootstrap_bundle(bootstraps, resamples, Fit, model, data, grids, bounds, indices, auto_fit=True, verbose=1, Ns=None):
-    
+
     # initialze
     Fits = []
-    
+
     # main loop
     for resample in resamples:
         for bootstrap in xrange(bootstraps):
             for voxel in xrange(data.shape[0]):
-                
+
                 # voxel
                 voxel_idx = indices[voxel]
-                
+
                 # create random draws
                 resample_idx = np.random.choice(np.arange(data.shape[1]-1),resample,replace=False)
-                
+
                 # data
                 this_data = np.mean(data[voxel,resample_idx,:],0)
-                
+
                 # store it
                 Fits.append((Fit, model, this_data, grids, bounds, Ns, voxel_idx, auto_fit, verbose, resample_idx))
-                
+
     # randomize list order
     idx = np.argsort(np.random.rand(len(Fits)))
     Fits = [Fits[i] for i in idx]
-    
+
     return Fits
 
 def xval_bundle(bootstraps, kfolds, Fit, model, data, grids, bounds, indices, auto_fit=True, verbose=1, Ns=None):
-    
+
     # num runs
     runs = np.arange(data.shape[1])
-    
+
     # initialize
     Fits = []
-    
+
     # main loop
     for bootstrap in xrange(bootstraps):
         for voxel in xrange(data.shape[0]):
-            
+
             # voxel
             voxel_idx = indices[voxel]
-            
+
             # data
             the_data = data[voxel,:,:]
-            
+
             # create random draws
             if kfolds == 1: # leave one out
                 trn_idx = np.random.choice(runs, len(runs)-1, replace=False)
             else:
                 trn_idx = np.random.choice(runs, np.int(len(runs)/kfolds), replace=False)
-            
+
             tst_idx = np.array(list(set(runs)-set(trn_idx)))
-            
+
             # compute mean timeseries
             trn_data = np.mean(the_data[trn_idx,:], 0)
             tst_data = np.mean(the_data[tst_idx,:], 0)
-            
+
             # store it
             Fits.append((Fit, model, trn_data, tst_data, grids, bounds, Ns, voxel_idx, auto_fit, verbose, trn_idx, tst_idx))
-    
+
     # randomize list order
     idx = np.argsort(np.random.rand(len(Fits)))
     Fits = [Fits[i] for i in idx]
-    
+
     return Fits
 
 def multiprocess_bundle(Fit, model, data, grids, bounds, indices, auto_fit=True, verbose=1, Ns=None):
-    
+
     # num voxels
     num_voxels = np.int(np.shape(data)[0])
-    
+
     # expand out grids and bounds
     grids = [grids,]*num_voxels
     bounds = [bounds,]*num_voxels
-    
+
     # package the data structure
     dat = zip(repeat(Fit,num_voxels),
               repeat(model,num_voxels),
@@ -832,24 +832,24 @@ def multiprocess_bundle(Fit, model, data, grids, bounds, indices, auto_fit=True,
               indices,
               repeat(auto_fit,num_voxels),
               repeat(verbose,num_voxels))
-    
+
     # randomize list order
     dat = list(dat)
     idx = np.argsort(np.random.rand(len(dat)))
     dat = [dat[i] for i in idx]
-    
+
     return dat
 
 def gaussian_2D(X, Y, x0, y0, sigma_x, sigma_y, degrees, amplitude=1):
-    
+
     theta = degrees*np.pi/180
-    
+
     a = np.cos(theta)**2/2/sigma_x**2 + np.sin(theta)**2/2/sigma_y**2
     b = -np.sin(2*theta)/4/sigma_x**2 + np.sin(2*theta)/4/sigma_y**2
     c = np.sin(theta)**2/2/sigma_x**2 + np.cos(theta)**2/2/sigma_y**2
-    
+
     Z = amplitude*np.exp( - (a*(X-x0)**2 + 2*b*(X-x0)*(Y-y0) + c*(Y-y0)**2))
-    
+
     return Z
 
 def parallel_xval(args):
@@ -859,23 +859,23 @@ def parallel_xval(args):
     procedure.  Each call is handed a tuple or list containing
     all the necessary inputs for instantiaing a `GaussianFit`
     class object and estimating the model parameters.
-    
-    
+
+
     Paramaters
     ----------
     args : list/tuple
         A list or tuple containing all the necessary inputs for fitting
         the Gaussian pRF model.
-        
+
     Returns
     -------
-    
+
     fit : `Fit` class object
         A fit object that contains all the inputs and outputs of the
         pRF model estimation for a single voxel.
-        
+
     """
-    
+
     # unpackage the arguments
     Fit = args[0]
     model = args[1]
@@ -889,7 +889,7 @@ def parallel_xval(args):
     verbose = args[9]
     trn_idx = args[10]
     tst_idx = args[11]
-    
+
     # fit the data
     fit = Fit(model,
               trn_data,
@@ -899,40 +899,40 @@ def parallel_xval(args):
               voxel_index,
               auto_fit,
               verbose)
-    
+
     fit.trn_data = trn_data
     fit.tst_data = tst_data
     fit.trn_idx = trn_idx
     fit.tst_idx = tst_idx
     fit.cod = coeff_of_determination(fit.tst_data, fit.prediction)
-    
+
     return fit
-        
+
 def parallel_bootstrap(args):
-    
+
     r"""
     This is a convenience function for parallelizing the fitting
     procedure.  Each call is handed a tuple or list containing
     all the necessary inputs for instantiaing a `GaussianFit`
     class object and estimating the model parameters.
-    
-    
+
+
     Paramaters
     ----------
     args : list/tuple
         A list or tuple containing all the necessary inputs for fitting
         the Gaussian pRF model.
-        
+
     Returns
     -------
-    
+
     fit : `Fit` class object
         A fit object that contains all the inputs and outputs of the
         pRF model estimation for a single voxel.
-        
+
     """
-    
-    
+
+
     # unpackage the arguments
     Fit = args[0]
     model = args[1]
@@ -944,7 +944,7 @@ def parallel_bootstrap(args):
     auto_fit = args[7]
     verbose = args[8]
     resamples = args[9]
-    
+
     # fit the data
     fit = Fit(model,
               data,
@@ -954,10 +954,10 @@ def parallel_bootstrap(args):
               voxel_index,
               auto_fit,
               verbose)
-    
+
     fit.resamples = resamples
     fit.n_resamples = len(resamples)
-    
+
     return fit
 
 
@@ -968,23 +968,23 @@ def parallel_fit(args):
     procedure.  Each call is handed a tuple or list containing
     all the necessary inputs for instantiaing a `GaussianFit`
     class object and estimating the model parameters.
-    
+
     Paramaters
     ----------
     args : list/tuple
         A list or tuple containing all the necessary inputs for fitting
         the Gaussian pRF model.
-        
+
     Returns
     -------
-    
+
     fit : `Fit` class object
         A fit object that contains all the inputs and outputs of the
         pRF model estimation for a single voxel.
-        
+
     """
-    
-    
+
+
     # unpackage the arguments
     Fit = args[0]
     model = args[1]
@@ -995,7 +995,7 @@ def parallel_fit(args):
     Ns = args[6]
     auto_fit = args[7]
     verbose = args[8]
-    
+
     if True:
         # fit the data
         fit = Fit(model,
@@ -1007,7 +1007,7 @@ def parallel_fit(args):
                   auto_fit,
                   verbose)
         return fit
-    
+
     # except:
 
     #     fit = Fit(model,
@@ -1078,21 +1078,21 @@ def peakdet(v, delta, x = None):
     #
     # Eli Billauer, 3.4.05 (Explicitly not copyrighted).
     # This function is released to the public domain; Any use is allowed.
-    
+
     """
     maxtab = []
     mintab = []
-    
+
     if x is None: # pragma: no cover
         x = arange(len(v))
-        
+
     v = asarray(v)
-    
+
     mn, mx = Inf, -Inf
     mnpos, mxpos = NaN, NaN
-    
+
     lookformax = True
-    
+
     for i in arange(len(v)):
         this = v[i]
         if this > mx:
@@ -1101,7 +1101,7 @@ def peakdet(v, delta, x = None):
         if this < mn:
             mn = this
             mnpos = x[i]
-            
+
         if lookformax:
             if this < mx-delta:
                 maxtab.append((mxpos, mx))
@@ -1118,11 +1118,11 @@ def peakdet(v, delta, x = None):
     return array(maxtab), array(mintab)
 
 def coeff_of_determination(data, model, axis=-1):
-    
+
     r"""
     Calculate the coefficient of determination for a model prediction, relative
     to data.
-    
+
     Parameters
     ----------
     data : ndarray
@@ -1131,24 +1131,24 @@ def coeff_of_determination(data, model, axis=-1):
         The predictions of a model for this data. Same shape as the data.
     axis: int, optional
         The axis along which different samples are laid out (default: -1).
-        
+
     Returns
     -------
     COD : ndarray
        The coefficient of determination.
-       
+
     """
-    
+
     residuals = data - model
     ss_err = np.sum(residuals ** 2, axis=axis)
-    
+
     demeaned_data = data - np.mean(data, axis=axis)[..., np.newaxis]
     ss_tot = np.sum(demeaned_data **2, axis=axis)
-    
+
     # Don't divide by 0:
     if np.all(ss_tot==0.0):
         return np.nan
-            
+
     return 100 * (1 - (ss_err/ss_tot))
 
 # class ols:
