@@ -123,9 +123,10 @@ class PopulationModel(object):
 
     def hrf(self):
         if hasattr(self, 'hrf_delay'): # pragma: no cover
-            return self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
-        elif isinstance(self.hrf_model, list): # when list is passed just use it as HRF
-            return self.hrf_model
+            if isinstance(self.hrf_delay, int) or isinstance(self.hrf_delay, float):
+                return self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
+            elif isinstance(self.hrf_delay, list): # when list is passed just use it as HRF
+                return self.hrf_delay
         else: # pragma: no cover
             raise NotImplementedError("You must set the HRF delay to generate the HRF")
 
@@ -329,23 +330,33 @@ class PopulationFit(object):
         if self.model.cached_model_path is not None: # pragma: no cover
             return self.best_cached_model_parameters
         else:
-            return np.append(self.brute_force[0],(self.slope,self.intercept))
+            b = self.brute_force
+            return np.append(b[0],(self.slope,self.intercept, b[1]))
 
     # the gradient search
     @auto_attr
     def gradient_descent(self):
-
+        rawrss = np.sum((self.data-self.data.mean())**2)
         if self.very_verbose: # pragma: no cover
-            bp = self.ballpark
-            bp1, bp2 = bp[:-1], bp[-1]
-            print('The gridfit solution was %s, with rss %s, starting gradient descent...' %(bp1, bp2))
+            a = self.ballpark
+            a1, a2 = a[:-1], a[-1]
+            ve = 1 - a2 / rawrss
+            # print(f'The gridfit solution was {a1}, starting gradient descent...')
 
-        return utils.gradient_descent_search(self.data,
+        foo =  utils.gradient_descent_search(self.data,
                                              utils.error_function,
                                              self.model.generate_prediction,
-                                             self.ballpark[0],
+                                             self.ballpark[:-1],
                                              self.bounds,
                                              self.very_verbose)
+
+        if self.very_verbose:
+            print(f'rss before gradient descent: {a2:.4f}, VE {ve:.3f}')
+            print(f'rss after  gradient descent: {foo.fun:.4f}, VE {1 - foo.fun / rawrss:.3f}')
+
+        return foo
+
+
     @auto_attr
     def overloaded_estimate(self): # pragma: no cover
 
