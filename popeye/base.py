@@ -13,6 +13,7 @@ import popeye.utilities as utils
 import numpy as np
 import numexpr as ne
 from statsmodels.regression import linear_model as sm
+from scipy.integrate import trapz
 
 try:  # pragma: no cover
     from types import SliceType
@@ -126,9 +127,11 @@ class PopulationModel(object):
             if isinstance(self.hrf_delay, int) or isinstance(self.hrf_delay, float):
                 return self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
             elif isinstance(self.hrf_delay, list): # when list is passed just use it as HRF
-                return self.hrf_delay
+                hrf = np.array(self.hrf_delay)
+                hrf /= integrator(hrf)
+                return hrf
         else: # pragma: no cover
-            raise NotImplementedError("You must set the HRF delay to generate the HRF")
+            raise NotImplementedError("You must set the HRF delay to generate or directly pass the HRF")
 
     def cache_model(self, grids, ncpus=1, Ns=None, verbose=False):
 
