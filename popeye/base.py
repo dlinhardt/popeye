@@ -346,16 +346,15 @@ class PopulationFit(object):
             ve = 1 - a2 / rawrss
             # print(f'The gridfit solution was {a1}, starting gradient descent...')
 
-        foo =  utils.gradient_descent_search(self.data,
-                                             utils.error_function,
-                                             self.model.generate_prediction,
-                                             self.ballpark[:-1],
-                                             self.bounds,
-                                             self.very_verbose)
+        foo = utils.gradient_descent_search(self.data,
+                                            utils.error_function,
+                                            self.model.generate_prediction,
+                                            self.ballpark[:-1],
+                                            self.bounds,
+                                            self.very_verbose)
 
         if self.very_verbose:
-            print(f'rss before gradient descent: {a2:.4f}, VE {ve:.3f}')
-            print(f'rss after  gradient descent: {foo.fun:.4f}, VE {1 - foo.fun / rawrss:.3f}')
+            print(f'rss after  gradient descent: {foo.fun:.4f}; VE {1 - foo.fun / rawrss:.3f}')
 
         return foo
 
