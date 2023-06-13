@@ -454,14 +454,18 @@ def check_parameters(parameters, bounds):
 
 def error_function_rss(parameters, data, objective_function, verbose):
     prediction = objective_function(*parameters)
-    error = rss(data, prediction)
-    return error
+    if np.any(np.isnan(prediction)):
+        return np.inf
+    else:
+        return rss(data, prediction)
 
 # generic error function
 def error_function_residual(parameters, data, objective_function, verbose):
     prediction = objective_function(*parameters)
-    error = residual(data, prediction)
-    return error
+    if np.any(np.isnan(prediction)):
+        return np.inf
+    else:
+        return residual(data, prediction)
 
 def brute_force_search(data, error_function, objective_function, grids, Ns=None, verbose=False):
 
